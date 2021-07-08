@@ -1,22 +1,29 @@
+<p align="center">
+<img src=".images/kubernetes.png" alt="Kubernetes Logo" width="300px">
+</p>
 
-# Run a single-node kubernetes cluster for 5€/month
+# ☁️ Setup A Hobbyist Kubernetes Cluster In The Cloud For 5€/Month
+This tutorial will guide you through the setup of a **Kubernetes cluster** on a VPS server.
+In the end you will have:
+- ☸️  &nbsp; fully-functional single-node **cluster** running on a VPS
+- 🌐  &nbsp; hello-world frontend **deployed** and **accessible** from your local browser
 
-## What this tutorial expects you to know.
-You need basic understanding of 
-- Linux environment
-- SSH
+## 🌱 Skill Prerequisites
+You need **basic** understanding of 
+- 💻  &nbsp; **Linux Environment**: ssh, shell, users, network stack
+- ☸️  &nbsp; **Kubernetes**: high-level understanding of resources like Nodes, Pods, Deployments, etc.
+- 🐳. &nbsp;**Docker**: ideally, you have used a Docker image before
+ 
 
-## Contabo
-[Contabo](https://contabo.com/de/) is a standard cloud hosting provider. 
-As the headline advertises Contabo offer a VPS server with solid hardware for 5€.  
-
-We will use this server to host our single-node k8s cluster.
-The setup via their website is easy and quick. You can pay with credit card or paypal.
-Once the server is provisioned you can access it via SSH (the passwords is sent via E-Mail).
+## ☁️ VPS Hosting On Contabo
+[Contabo](https://contabo.com/de/) is a standard cloud hosting provider.  
+As the headline advertises, Contabo offers a VPS server with solid hardware (4vCPU, 8GB Ram, 200GB SSD) for 5€.  
+The setup via their website is easy and quick. You can pay with a credit card or Paypal.
+Once the server is provisioned you can access it via SSH (the password is sent via E-Mail).
 ```bash
 ssh root@<vps-ip>
 ```
-First, we should create a new user, change the password and add him to the sudoers group.
+First, we should create a new user, change the password and add the user to the sudoers group.
 ````bash
 useradd -m <user-name>
 passwd <user-name>
@@ -24,22 +31,28 @@ usermod -aG sudo <user-name>
 ````
 Now, you can log into the server with the new username and password.
 
-### Side Note
-I can only recommend to install a more advanced terminal. It will speed up your productivity.
-Personally, I like `zsh` but choose by your own preference ([zsh install guide](https://blog.ssdnodes.com/blog/perk-vps-better-terminal-zsh/))
+### 🗒 Side Note
+I can only recommend installing a more advanced terminal. It will speed up your productivity.
+Personally, I like `zsh`: [zsh install guide](https://blog.ssdnodes.com/blog/perk-vps-better-terminal-zsh/))
 
-## KUBERNETES  
-This section details how we install a healthy kubernetes cluster on our VPS server.
+## ☸️ KUBERNETES  
+This section details how to install a healthy Kubernetes cluster on our VPS server.
 
-#### Prerequisites:
+### 🌱 Prerequisites:
 Docker needs to be installed. Follow the instructions on the [docker](https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository) website.
 
 ### Kubeadm
 [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/) is a tool built to provide `kubeadm init` and `kubeadm join` as best-practice "fast paths" for creating Kubernetes clusters.
+
+For convenience, make Docker executable without sudo:
 ```
 sudo usermod -aG docker $USER
 newgrp docker
+```
 
+Install Kubeadm:
+```
+# Adjust docker config
 sudo bash -c 'cat > /etc/docker/daemon.json <<EOF
 {
   "exec-opts": ["native.cgroupdriver=systemd"],
@@ -55,6 +68,7 @@ sudo mkdir -p /etc/systemd/system/docker.service.d
 sudo systemctl daemon-reload
 sudo systemctl restart docker
 
+# Prepare installation
 sudo apt-get update && sudo apt-get install -y apt-transport-https curl
 
 curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
@@ -63,6 +77,7 @@ sudo bash -c "cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb https://apt.kubernetes.io/ kubernetes-xenial main
 EOF"
 
+# Install kubeadm package
 sudo apt-get update
 sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
@@ -73,10 +88,9 @@ sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 sudo reboot
 ```
 
-## Setup
+## 🕸 Setup A Network
 
-The cluster setup requires some steps.
-Start the cluster with flannel as network:
+Start the cluster with flannel as a network:
 ```
 sudo sysctl net.bridge.bridge-nf-call-iptables=1
 ```
@@ -89,30 +103,34 @@ sudo sysctl net.bridge.bridge-nf-call-iptables=1
 su - root
 sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=all
 
-# Add this to roots bashrc
+# tell kubectl where to find the config
 export KUBECONFIG=/etc/kubernetes/admin.conf
 
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/2140ac876ef134e0ed5af15c65e414cf26827915/Documentation/kube-flannel.yml
 ```
 
-Taint the master node to be able to run pods:
+Taint the master node to be able to run pods.
+By default, Kubernetes is configured to run no pods on the master node for good reasons. If you plan to deploy resource-intensive applications or have security concerns
+it is better to provision a multi-node cluster.
 ```
 kubectl taint nodes --all node-role.kubernetes.io/master-
 ```
-Change back to your user
+
+Change back to your user:
 ```
 su <user-name>
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
+# add this to your .bashrc to make permanent
 export KUBECONFIG=$HOME/.kube/config
 ```
+Hint: Making a copy of the `.kube/config` to your local machine to access the cluster from there.
 
-Let's test our cluster with a simple application. 
-We will deploy a [hello-world frontend](https://hub.docker.com/r/tutum/hello-world/) using 
-the Kubernetes resource Deployment.
+## 🤖 Test With Hello World
+We will deploy a [hello-world frontend](https://hub.docker.com/r/tutum/hello-world/) using the Kubernetes resource Deployment.
 We use a minimal deployment file to run our docker image.
-It already contains a lot of fields for running just one container but they are all relevant
+It already contains a lot of fields but they are all relevant
 and explained in more detail [here](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 ```yaml
 apiVersion: apps/v1
@@ -133,13 +151,13 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: tutum/hello-world
+        image: tutum/hello-world  # <-- Our image name
         imagePullPolicy: Always
         ports:
           - name: http
-            containerPort: 80
+            containerPort: 80  # <-- Our container port 
 ```
-The Deployment will take care of the running the Pod containing the docker image `tutum/hello-world`.
+The Deployment will take care of running the Pod containing the Docker image `tutum/hello-world`.
 Store the YAML config in `frontend-deployment.yml` and create the resource on your k8s cluster
 ```shell
 kubectl -f apply frontend-deployment.yml
@@ -149,9 +167,9 @@ You can check the status of your Deployment and corresponding Pod
 kubectl get pods
 kubectl get deployments
 ```
-To access the docker container inside the Pod, inside the Deployment, inside the Cluster we will use 
+To access the Docker container inside the Pod, inside the Deployment, inside the Cluster we will use 
 port forwarding. From your local machine run
 ```shell
 kubectl port-forward deployment/frontend 8080:80
 ```
-Open your browser http://localhost:8080.
+Open your browser [here](http://localhost:8080).
